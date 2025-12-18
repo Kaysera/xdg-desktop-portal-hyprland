@@ -2,6 +2,7 @@
 #include "../dbusDefines.hpp"
 #include "hyprland-input-capture-v1.hpp"
 #include "../includes.hpp"
+#include "../shared/Eis.hpp"
 #include "../shared/Session.hpp"
 #include <sdbus-c++/Types.h>
 
@@ -43,6 +44,30 @@ class CInputCapturePortal {
         std::unique_ptr<SDBusRequest>             request;
         std::unique_ptr<SDBusSession>             session;
         std::unique_ptr<CCHyprlandInputCaptureV1> whandle;
+
+        std::string                            appid;
+        std::unique_ptr<EmulatedInputServer>   eis;
+        std::unordered_map<uint32_t, SBarrier> barriers;
+        uint32_t                               activationId = 0;
+        ClientStatus                           status       = CREATED;
+
+        //
+        bool     activate(double x, double y, uint32_t borderId);
+        bool     deactivate();
+        bool     disable();
+        bool     zonesChanged();
+
+        void     motion(double dx, double dy);
+        void     key(uint32_t key, bool pressed);
+        void     modifiers(uint32_t modsDepressed, uint32_t modsLatched, uint32_t modsLocked, uint32_t group);
+        void     keymap(Keymap keymap);
+        void     button(uint32_t button, bool pressed);
+        void     axis(bool axis, double value);
+        void     axisValue120(bool axis, int32_t value120);
+        void     axisStop(bool axis);
+        void     frame();
+
+        uint32_t isColliding(double px, double py, double nx, double ny);
     };
 
     std::unordered_map<std::string, const std::shared_ptr<SSession>> sessions;
@@ -50,6 +75,10 @@ class CInputCapturePortal {
     std::unique_ptr<sdbus::IObject> m_pObject;
     uint                            sessionCounter = 0;
     uint                            lastZoneSet    = 0;
+    Keymap                          keymap; //We store the active keymap ready to be sent when creating EIS
+
+    const sdbus::InterfaceName      INTERFACE_NAME = sdbus::InterfaceName{"org.freedesktop.impl.portal.InputCapture"};
+    const sdbus::ObjectPath         OBJECT_PATH    = sdbus::ObjectPath{"/org/freedesktop/portal/desktop"};
 
     //
     dbUasv        onCreateSession(sdbus::ObjectPath requestHandle, sdbus::ObjectPath sessionHandle, std::string appID, std::string parentWindow,
@@ -61,6 +90,17 @@ class CInputCapturePortal {
     dbUasv        onDisable(sdbus::ObjectPath sessionHandle, std::string appID, std::unordered_map<std::string, sdbus::Variant> opts);
     dbUasv        onRelease(sdbus::ObjectPath sessionHandle, std::string appID, std::unordered_map<std::string, sdbus::Variant> opts);
     sdbus::UnixFd onConnectToEIS(sdbus::ObjectPath sessionHandle, std::string appID, std::unordered_map<std::string, sdbus::Variant> opts);
+
+    void          onForceRelease();
+    void          onMotion(double x, double y, double dx, double dy);
+    void          onKeymap(int32_t fd, uint32_t size);
+    void          onKey(uint32_t key, bool pressed);
+    void          onModifiers(uint32_t modsDepressed, uint32_t modsLatched, uint32_t modsLocked, uint32_t group);
+    void          onButton(uint32_t button, bool pressed);
+    void          onAxis(bool axis, double value);
+    void          onAxisValue120(bool axis, int32_t value120);
+    void          onAxisStop(bool axis);
+    void          onFrame();
 
     bool          sessionValid(sdbus::ObjectPath sessionHandle);
     void          removeSession(sdbus::ObjectPath sessionHandle);
